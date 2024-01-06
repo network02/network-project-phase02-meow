@@ -1,5 +1,6 @@
 import socket
 import os
+import datetime
 
 # Config
 import struct
@@ -7,7 +8,7 @@ import sys
 import time
 
 IP = "127.0.0.1"
-PORT = 2000
+PORT = 2001
 BUFFER_SIZE = 1024
 socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 socket.bind((IP, PORT))
@@ -16,10 +17,6 @@ print(f"\nFTP server is online on {IP}:{PORT}!\n")
 conn, addr = socket.accept()
 
 print("\nConnected to by address: {}".format(addr))
-
-
-import os
-import datetime
 
 def list_files():
     print("Listing files...")
@@ -110,6 +107,47 @@ def download_file_from_server():
     conn.sendall(struct.pack(">f", time.time() - start_time))
     return
 
+def delete_file():
+    conn.sendall(b"1")
+    file_name_length = struct.unpack("h", conn.recv(2))[0]
+    file_name = conn.recv(file_name_length).decode()
+    if os.path.isfile(file_name):
+        conn.sendall(struct.pack("i", 1))
+    else:
+        conn.sendall(struct.pack("i", -1))
+        return None
+    confirm_delete = conn.recv(BUFFER_SIZE).decode()
+    if confirm_delete == "Y":
+        try:
+            os.remove(file_name)
+            conn.sendall(struct.pack("i", 1))
+        except:
+            print("Failed to delete {}".format(file_name))
+            conn.sendall(struct.pack("i", -1))
+    else:
+        print("Delete abandoned by the client!")
+        return None
+
+
+def create_directory():
+    # Send go-ahead
+    conn.sendall(b"1")
+    # Get Directory details
+    directory_name_length = struct.unpack("h", conn.recv(2))[0]
+    print(directory_name_length)
+    conn.sendall(b"1")
+    directory_name = conn.recv(directory_name_length).decode()
+    print(directory_name)
+    conn.sendall(b"1")
+    try:
+        os.mkdir(directory_name)
+        conn.sendall(b"1")
+    except OSError as error:
+        print(error)
+        conn.sendall(b"0")
+    return None
+
+
 
 while True:
     data = conn.recv(BUFFER_SIZE).decode()
@@ -121,8 +159,6 @@ while True:
     if data == "RETR":
             download_file_from_server()
     if data == "QUIT":
-        break
-    else:
         pass
     data = None
 
