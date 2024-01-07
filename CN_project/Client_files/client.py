@@ -377,7 +377,10 @@ while True:
     command = input("\nCommand -> ").split()
 
     if command[0].upper() == "CONN":
-        connect()
+        username = input("Username: ")
+        password = input("Password: ")
+        connect(username, password)
+
 
     elif command[0].upper() == "LIST":
         list_of_files()
