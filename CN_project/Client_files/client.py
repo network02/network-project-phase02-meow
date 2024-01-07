@@ -35,21 +35,6 @@ def connect(username, password):
     except:
         print("Couldn't connect! :(")
 
-def authorization(username, password):
-    socket.send(username.encode('utf-8'))
-    ack = socket.recv(BUFFER_SIZE)
-    if ack == b'1':
-        socket.send(password.encode('utf-8'))
-        ack = socket.recv(BUFFER_SIZE)
-        if ack == b'1':
-            print("200 You are logged in!")
-        else:
-            print("400 The password you entered is not valid.")
-    else:
-        print("400 The username you entered is not valid.")
-
-
-
 
 def start_data_connection():
     data_socket = S.socket(S.AF_INET, S.SOCK_STREAM)
