@@ -11,15 +11,40 @@ PORT = 2000
 BUFFER_SIZE = 1024
 socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-
-def connect():
+def connect(username, password):
     # Connect to the server
     print("Sending request to server...")
     try:
         socket.connect((IP, PORT))
-        print("Connected successfully!")
+        print("200 Socket connected successfully!")
+        socket.send(username.encode('utf-8'))
+        ack = socket.recv(BUFFER_SIZE)
+        if ack == b'1':
+            socket.send(password.encode('utf-8'))
+            ack = socket.recv(BUFFER_SIZE)
+            if ack == b'1':
+                print("200 You are logged in!")
+            else:
+                print("400 The password you entered is not valid.")
+        else:
+            print("400 The username you entered is not valid.")
     except:
         print("Couldn't connect! :(")
+
+def authorization(username, password):
+    socket.send(username.encode('utf-8'))
+    ack = socket.recv(BUFFER_SIZE)
+    if ack == b'1':
+        socket.send(password.encode('utf-8'))
+        ack = socket.recv(BUFFER_SIZE)
+        if ack == b'1':
+            print("200 You are logged in!")
+        else:
+            print("400 The password you entered is not valid.")
+    else:
+        print("400 The username you entered is not valid.")
+
+
 
 
 def upload_file_on_server(fileName):

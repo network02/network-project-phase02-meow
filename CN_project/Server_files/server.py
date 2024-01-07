@@ -6,6 +6,16 @@ import struct
 import sys
 import time
 
+users = [{'username': 'user1', 'password': '1234',
+         'accessLevel': 'low'},
+
+        {'username': 'user2', 'password': '1235',
+         'accessLevel': 'low'},
+
+        {'username': 'user3', 'password': '1236',
+         'accessLevel': 'high'}]
+
+
 IP = "127.0.0.1"
 PORT = 2000
 BUFFER_SIZE = 1024
@@ -17,9 +27,29 @@ conn, addr = socket.accept()
 
 print("\nConnected to by address: {}".format(addr))
 
+username = conn.recv(BUFFER_SIZE).decode()
+print(f"\nReceived: {format(username)}")
+
+is_user_logged_in = False
+for i in range (len(users)):
+    if username == users[i]["username"]:
+        is_user_logged_in = True
+        conn.send(b'1')
+        password = conn.recv(BUFFER_SIZE).decode()
+        print(f"\nReceived: {format(password)}")
+        if password == users[i]["password"]:
+            conn.send(b'1')
+        else:
+            conn.send(b'-1')
+            print("400 Invalid password")
+
+if not is_user_logged_in:
+    conn.send(b'-1')
+    print("400 Invalid username")
 
 import os
 import datetime
+
 
 def list_files():
     print("Listing files...")
@@ -110,8 +140,8 @@ def download_file_from_server():
     conn.sendall(struct.pack(">f", time.time() - start_time))
     return
 
-
 while True:
+
     data = conn.recv(BUFFER_SIZE).decode()
     print(f"\nReceived: {format(data)}")
     if data == "LIST":
