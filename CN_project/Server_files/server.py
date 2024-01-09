@@ -5,17 +5,20 @@ import struct
 import sys
 import time
 
-
 users = [{'username': 'user1', 'password': '1234',
-         'accessLevel': 'low'},
+          'accessLevel': 'low'},
 
-        {'username': 'user2', 'password': '1235',
-         'accessLevel': 'low'},
+         {'username': 'user2', 'password': '1235',
+          'accessLevel': 'low'},
 
-        {'username': 'user3', 'password': '1236',
-         'accessLevel': 'high'}]
+         {'username': 'user3', 'password': '1236',
+          'accessLevel': 'high'},
 
+         {'username': 'admin', 'password': '0000',
+          'accessLevel': 'full'}]
 
+private_paths = [{'path': 'private1'},
+                 {'path': 'private2'}]
 
 IP = "127.0.0.1"
 PORT = 21
@@ -32,7 +35,7 @@ username = conn.recv(BUFFER_SIZE).decode()
 print(f"\nReceived: {format(username)}")
 
 is_user_logged_in = False
-for i in range (len(users)):
+for i in range(len(users)):
     if username == users[i]["username"]:
         is_user_logged_in = True
         conn.send(b'1')
@@ -56,6 +59,17 @@ def start_data_connection():
     data_socket.listen()
     conn2, addr = data_socket.accept()
     return conn2
+
+def report():
+    conn2 = start_data_connection()
+    print("Reporting previous requests...\n")
+
+    with open("report.txt", "r+") as report_file:
+        # Reading form a file
+        conn2.send(b'1')
+        l = report_file.read(4096)
+        conn2.send(l.encode('utf-8'))
+    print("The report has been sent.\n")
 
 
 def list_files():
@@ -114,51 +128,56 @@ def download_file_from_server():
 
     # Receive the entire file name from the client
     fileName = conn2.recv(fileNameLength).decode('utf-8')
+    print(fileName)
+    if fileName.startswith("/"):
+        directory, fileName = os.path.split(fileName)
+        change_directory()
 
-    # Check if the file exists on the server
-    if os.path.isfile(fileName):
-        # If the file exists, send its size to the client
-        fileSize = struct.pack(">i", os.path.getsize(fileName))
-        conn2.send(fileSize)
-    else:
-        # If the file doesn't exist, send an error code to the client
-        print("File name not valid")
-        conn.sendall(struct.pack(">i", -1))
+    if directory == private_paths[0]["path"]:
+        # Check if the file exists on the server
+        if os.path.isfile(fileName):
+            # If the file exists, send its size to the client
+            fileSize = struct.pack(">i", os.path.getsize(fileName))
+            conn2.send(fileSize)
+        else:
+            # If the file doesn't exist, send an error code to the client
+            print("File name not valid")
+            conn.sendall(struct.pack(">i", -1))
+            return
+
+        # Wait for client's acknowledgement to start sending the file
+        conn.recv(BUFFER_SIZE)
+
+        # Start the download timer
+        start_time = time.time()
+        print("Sending file...")
+
+        # Open the file in binary read mode for reading
+        content = open(fileName, 'rb')
+
+        # Read the file in chunks of BUFFER_SIZE and send them to the client
+        l = content.read(BUFFER_SIZE)
+        while l:
+            print("server while")
+            conn2.send(l)
+            l = content.read(BUFFER_SIZE)
+
+        # Close the file handle
+        conn.recv(BUFFER_SIZE)
+
+        content.close()
+
+        # Receive the client's go-ahead before sending download details
+        conn.recv(BUFFER_SIZE)
+
+        # Send the download time to the client
+        # conn.sendall(struct.pack(">f", time.time() - start_time))
+        print(f"{fileName} Successfully downloaded")
         return
 
-    # Wait for client's acknowledgement to start sending the file
-    conn.recv(BUFFER_SIZE)
-
-    # Start the download timer
-    start_time = time.time()
-    print("Sending file...")
-
-    # Open the file in binary read mode for reading
-    content = open(fileName, 'rb')
-
-    # Read the file in chunks of BUFFER_SIZE and send them to the client
-    l = content.read(BUFFER_SIZE)
-    while l:
-        print("server while")
-        conn2.send(l)
-        l = content.read(BUFFER_SIZE)
-
-    # Close the file handle
-    conn.recv(BUFFER_SIZE)
-
-    content.close()
-
-    # Receive the client's go-ahead before sending download details
-    conn.recv(BUFFER_SIZE)
-
-
-    # Send the download time to the client
-    # conn.sendall(struct.pack(">f", time.time() - start_time))
-    print(f"{fileName} Successfully downloaded")
-
-    return
-
-
+    else:
+        print("400 This is a private path or file!")
+        conn.sendall(struct.pack(">i", -1))
 
 def delete_file():
     conn2 = start_data_connection()
@@ -266,7 +285,6 @@ def change_directory_up():
     return None
 
 
-
 while True:
 
     data = conn.recv(BUFFER_SIZE).decode()
@@ -291,10 +309,8 @@ while True:
         change_directory_up()
     if data == "PASV":
         data_socket = start_data_connection()
+    if data == "REPORT":
+        report()
     if data == "QUIT":
         pass
     data = None
-
-
-
-
