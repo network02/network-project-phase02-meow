@@ -20,7 +20,7 @@ users = [{'username': 'user1', 'password': '1234',
 
 class Client(Thread):
     IP = "127.0.0.1"
-    PORT = 21
+    PORT = 27
     BUFFER_SIZE = 1024
 
     def __init__(self, conn : S.socket) -> None:
@@ -29,7 +29,7 @@ class Client(Thread):
         self.authenticated: bool = False
         self.username: Optional[str] = None
         self.password: Optional[str] = None
-        self.path: str = os.getcwd()
+        self.current_directory: str = os.getcwd()
         # self.TCP_DATA_PORT = random.randint(4500, 4999)
 
         super().__init__()
@@ -75,7 +75,8 @@ class Client(Thread):
                 elif data == "CDUP":
                     self.change_directory_up()
                 elif data == "QUIT":
-                    pass
+                    self.conn.close()
+                    break
                 data = None
 
     def start_data_connection(self):
@@ -89,13 +90,14 @@ class Client(Thread):
     def list_files(self) -> None:
         conn2 = self.start_data_connection()
         print("Listing files...")
-        listing = os.listdir(self.path)
+        listing = os.listdir(self.current_directory)
         conn2.send(len(listing).to_bytes(4, byteorder='big'))
         for i in listing:
+            j = os.path.relpath(self.current_directory + '\\' + i, os.getcwd())
             conn2.send(len(i).to_bytes(4, byteorder='big'))
             conn2.send(i.encode())
-            conn2.send(os.path.getsize(i).to_bytes(4, byteorder='big'))
-            file_creation_time = os.path.getctime(i)
+            conn2.send(os.path.getsize(j).to_bytes(4, byteorder='big'))
+            file_creation_time = os.path.getctime(j)
             file_creation_time_str = datetime.datetime.fromtimestamp(file_creation_time).strftime('%Y-%m-%d %H:%M:%S')
             conn2.send(file_creation_time_str.encode())
             self.conn.recv(Client.BUFFER_SIZE)
@@ -115,7 +117,7 @@ class Client(Thread):
         fileSize = struct.unpack(">i", conn2.recv(4))[0]
         # Initialise and enter loop to recieve file content
         start_time = time.time()
-        outputFile = open(fileName, 'wb')
+        outputFile = open(self.current_directory + "\\" + fileName, 'wb')
         # This keeps track of how many bytes we have recieved, so we know when to stop the loop
         bytesReceived = 0
         print("\nReceiving...")
@@ -142,9 +144,9 @@ class Client(Thread):
         fileName = conn2.recv(fileNameLength).decode('utf-8')
 
         # Check if the file exists on the server
-        if os.path.isfile(fileName):
+        if os.path.isfile(self.current_directory + "\\" + fileName):
             # If the file exists, send its size to the client
-            fileSize = struct.pack(">i", os.path.getsize(fileName))
+            fileSize = struct.pack(">i", os.path.getsize(self.current_directory + "\\" + fileName))
             conn2.send(fileSize)
         else:
             # If the file doesn't exist, send an error code to the client
@@ -189,7 +191,7 @@ class Client(Thread):
         file_name_length = struct.unpack("h", conn2.recv(2))[0]
         file_name = conn2.recv(file_name_length).decode()
 
-        if os.path.isfile(self.path + "\\" + file_name):
+        if os.path.isfile(self.current_directory + "\\" + file_name):
             self.conn.sendall(struct.pack("i", 1))
         else:
             self.conn.sendall(struct.pack("i", -1))
@@ -218,7 +220,7 @@ class Client(Thread):
         print(directory_name)
         self.conn.sendall(b"1")
         try:
-            os.mkdir(self.path + "\\" + directory_name)
+            os.mkdir(self.current_directory + "\\" + directory_name)
             self.conn.sendall(b"1")
         except OSError as error:
             print(error)
@@ -238,7 +240,7 @@ class Client(Thread):
             if os.path.isabs(directory_name):
                 os.rmdir(directory_name)
             else:
-                os.rmdir(self.path + "\\" + directory_name)
+                os.rmdir(self.current_directory + "\\" + directory_name)
             # os.rmdir(directory_name)
             self.conn.sendall(b"1")
         except OSError as error:
@@ -254,10 +256,10 @@ class Client(Thread):
         new_path = conn2.recv(new_path_length).decode()
         try:
             if os.path.isabs(new_path):
-                self.path = new_path
+                self.current_directory = new_path
             else:
-                self.path = self.path + "\\" + new_path
-            print(self.path)
+                self.current_directory = self.current_directory + "\\" + new_path
+            print(self.current_directory)
             # os.chdir(new_path)
             self.conn.sendall(b"1")
         except OSError as error:
@@ -274,9 +276,9 @@ class Client(Thread):
             # print(cwd)
             # conn2.sendall(str(sys.getsizeof(cwd)).encode())
             # conn2.sendall(cwd.encode())
-            print(self.path)
-            conn2.sendall(str(sys.getsizeof(self.path)).encode())
-            conn2.sendall(self.path.encode())
+            print(self.current_directory)
+            conn2.sendall(str(sys.getsizeof(self.current_directory)).encode())
+            conn2.sendall(self.current_directory.encode())
             conn2.close()
             self.conn.sendall('226 Transfer complete.'.encode('utf-8'))
         except OSError as error:
@@ -288,9 +290,9 @@ class Client(Thread):
 
     def change_directory_up(self) -> None:
         try:
-            print(self.path)
-            self.path = os.path.dirname(self.path)
-            print(self.path)
+            print(self.current_directory)
+            self.current_directory = os.path.dirname(self.current_directory)
+            print(self.current_directory)
             # os.chdir('../')
             self.conn.sendall(b"1")
         except OSError as error:
