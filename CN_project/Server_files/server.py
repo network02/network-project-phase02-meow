@@ -7,15 +7,20 @@ import time
 from threading import Thread
 from typing import Optional
 
-
 users = [{'username': 'user1', 'password': '1234',
-         'accessLevel': 'low'},
+          'accessLevel': 'low'},
 
-        {'username': 'user2', 'password': '1235',
-         'accessLevel': 'low'},
+         {'username': 'user2', 'password': '1235',
+          'accessLevel': 'low'},
 
-        {'username': 'user3', 'password': '1236',
-         'accessLevel': 'high'}]
+         {'username': 'user3', 'password': '1236',
+          'accessLevel': 'high'},
+
+         {'username': 'admin', 'password': '0000',
+          'accessLevel': 'full'}]
+
+private_paths = [{'path': 'private1'},
+                 {'path': 'private2'}]
 
 
 class Client(Thread):
@@ -87,6 +92,18 @@ class Client(Thread):
         conn2, addr = data_socket.accept()
         return conn2
 
+    def report(self):
+        conn2 = self.start_data_connection()
+        print("Reporting previous requests...\n")
+
+        with open("report.txt", "r+") as report_file:
+            # Reading form a file
+            conn2.send(b'1')
+            l = report_file.read(4096)
+            conn2.send(l.encode('utf-8'))
+        print("The report has been sent.\n")
+
+
     def list_files(self) -> None:
         conn2 = self.start_data_connection()
         print("Listing files...")
@@ -143,6 +160,7 @@ class Client(Thread):
         # Receive the entire file name from the client
         fileName = conn2.recv(fileNameLength).decode('utf-8')
 
+
         # Check if the file exists on the server
         if os.path.isfile(self.current_directory + "\\" + fileName):
             # If the file exists, send its size to the client
@@ -184,6 +202,7 @@ class Client(Thread):
         print(f"{fileName} Successfully downloaded")
 
         return
+
 
     def delete_file(self) -> None:
         conn2 = self.start_data_connection()

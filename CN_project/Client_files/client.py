@@ -33,7 +33,7 @@ def connect(username, password):
         else:
             print("400 The username you entered is not valid.")
     except:
-        print("Couldn't connect! :(")
+        print("400 Couldn't connect! :(")
 
 
 def start_data_connection():
@@ -41,6 +41,22 @@ def start_data_connection():
     data_socket.connect(("127.0.0.1", 20))
     return data_socket
 
+def report():
+    print("Reporting previous requests...")
+    try:
+        socket.sendall(b"REPORT")
+        data_socket = start_data_connection()
+    except:
+        print("400 Couldn't make server request! check Connection.")
+        return
+
+    ack = data_socket.recv(4096)
+    if ack == b'1':
+        print("200 Previous requests are available:\n")
+        report_file = data_socket.recv(4096).decode()
+        print(report_file)
+    else:
+        print("400 The report file is unavailable.")
 
 def list_of_files():
     print("Requesting files...\n")
@@ -48,7 +64,7 @@ def list_of_files():
         socket.sendall(b"LIST")
         data_socket = start_data_connection()
     except:
-        print("Couldn't make server request! check Connection.")
+        print("400 Couldn't make server request! check Connection.")
         return
     try:
         number_of_files = int.from_bytes(data_socket.recv(4), byteorder='big')
@@ -61,13 +77,13 @@ def list_of_files():
             print("\t* {} | {}b | {}".format(file_name, file_size, file_creation_time.strftime('%Y-%m-%d %H:%M:%S')))
             socket.sendall(b"1")
     except:
-        print("Couldn't retrieve listing")
+        print("400 Couldn't retrieve listing")
         return
     try:
         socket.sendall(b"1")
         return
     except:
-        print("Couldn't get final server confirmation")
+        print("400 Couldn't get final server confirmation")
         return
 
 
@@ -78,14 +94,14 @@ def upload_file_on_server(fileName):
         # Check the file exists
         content = open(fileName, 'rb')
     except:
-        print("Couldn't open file. Make sure the file name was entered correctly.")
+        print("400 Couldn't open file. Make sure the file name was entered correctly.")
         return
     try:
         # Make upload request
         socket.send(b'STOR')
         data_socket = start_data_connection()
     except:
-        print("Couldn't make server request. Make sure a connection has been established.")
+        print("400 Couldn't make server request. Make sure a connection has been established.")
         return
     try:
         # Wait for server acknowledgement then send file details
@@ -101,7 +117,7 @@ def upload_file_on_server(fileName):
         fileSize = struct.pack(">i", os.path.getsize(filePath))
         data_socket.send(fileSize)
     except:
-        print("Error sending file details")
+        print("400 Error sending file details")
     try:
         # Send the file in chunks defined by BUFFER_SIZE
         # Doing it this way allows for unlimited potential file sizes to be sent
@@ -114,9 +130,9 @@ def upload_file_on_server(fileName):
         # Get upload performance details
         uploadTime = struct.unpack(">f", data_socket.recv(4))[0]
         uploadSize = struct.unpack(">i", data_socket.recv(4))[0]
-        print("\nSent file: {}\nTime elapsed: {:.2f}s\nFile size: {:,}b".format(fileName, uploadTime, uploadSize))
+        print("\n200 Sent file: {}\nTime elapsed: {:.2f}s\nFile size: {:,}b".format(fileName, uploadTime, uploadSize))
     except:
-        print("Error sending file")
+        print("400 Error sending file")
         return
     return
 
@@ -129,25 +145,32 @@ def download_file_from_server(fileName):
         socket.send(b'RETR')
         data_socket = start_data_connection()
     except:
-        print("Couldn't make server request. Make sure a connection has been established.")
+        print("400 Couldn't make server request. Make sure a connection has been established.")
         return
     try:
         # Wait for server's acknowledgement and check file existence
-        socket.recv(BUFFER_SIZE)
+        ack = socket.recv(BUFFER_SIZE)
+        if ack == b'1':
+            # Send file name length and file name to the server
+            fileNameSize = struct.pack(">h", sys.getsizeof(fileName))
+            data_socket.send(fileNameSize)
+            data_socket.send(fileName.encode('utf-8'))
 
-        # Send file name length and file name to the server
-        fileNameSize = struct.pack(">h", sys.getsizeof(fileName))
-        data_socket.send(fileNameSize)
-        data_socket.send(fileName.encode('utf-8'))
+            if fileName.startswith("/"):
+                directory, fileName = os.path.split(fileName)
+                change_directory(directory[1:])
 
-        # Receive file size from the server
-        fileSize = struct.unpack(">i", data_socket.recv(4))[0]
-        if fileSize == -1:
-            # If file size is -1, file doesn't exist
-            print("File does not exist. Make sure the name was entered correctly")
+            # Receive file size from the server
+            fileSize = struct.unpack(">i", data_socket.recv(4))[0]
+            if fileSize == -1:
+                # If file size is -1, file doesn't exist
+                print("400 File does not exist. Make sure the name was entered correctly")
+                return
+        else:
+            print("400 This is a private path or file!")
             return
     except:
-        print("Error checking file")
+        print("400 Error checking file")
     try:
         # Send acknowledgement to proceed with file transfer
         socket.send(b'1')
@@ -165,7 +188,6 @@ def download_file_from_server(fileName):
             l = data_socket.recv(BUFFER_SIZE)
             outputFile.write(l)
             bytesReceived += BUFFER_SIZE
-            print("while")
 
         # Close the file handler
         socket.sendall(b"1")
@@ -178,9 +200,9 @@ def download_file_from_server(fileName):
         # Receive download performance details
         # downloadTime = struct.unpack(">f", socket.recv(4))[0]
         # downloadSize = struct.unpack(">i", socket.recv(4))[0]
-        print(f"{fileName} Successfully downloaded")
+        print("200" + f"{fileName} Successfully downloaded")
     except:
-        print("Error downloading file")
+        print("400 Error downloading file")
         return
     return
 
@@ -193,7 +215,7 @@ def delete_file(file_name):
         data_socket = start_data_connection()
         socket.recv(BUFFER_SIZE)
     except:
-        print("Couldn't connect to the server. Make sure a connection has been established.")
+        print("400 Couldn't connect to the server. Make sure a connection has been established.")
         return None
     try:
         # Encode the size of the file name
@@ -205,15 +227,15 @@ def delete_file(file_name):
         # Send the file name
         data_socket.sendall(file_name.encode())
     except:
-        print("Couldn't send file details")
+        print("400 Couldn't send file details")
         return None
     try:
         file_exists = struct.unpack("i", socket.recv(4))[0]
         if file_exists == -1:
-            print("The file does not exist on the server")
+            print("400 The file does not exist on the server")
             return None
     except:
-        print("Couldn't determine file existence")
+        print("400 Couldn't determine file existence")
         return None
     try:
         confirm_delete = input("Are you sure you want to delete {}? (Y/N)\n".format(file_name)).upper()
@@ -221,24 +243,24 @@ def delete_file(file_name):
             print("Command not recognized, try again")
             confirm_delete = input("Are you sure you want to delete {}? (Y/N)\n".format(file_name)).upper()
     except:
-        print("Couldn't confirm deletion status")
+        print("400 Couldn't confirm deletion status")
         return None
     try:
         if confirm_delete == "Y" or confirm_delete == "YES":
             socket.sendall(b"Y")
             delete_status = struct.unpack("i", socket.recv(4))[0]
             if delete_status == 1:
-                print("File successfully deleted")
+                print("200 File successfully deleted")
                 return None
             else:
-                print("File failed to delete")
+                print("400 File failed to delete")
                 return None
         else:
             socket.sendall(b"N")
-            print("Delete abandoned by user!")
+            print("400 Delete abandoned by user!")
             return None
     except:
-        print("Couldn't delete the file")
+        print("400 Couldn't delete the file")
         return None
 
 
@@ -251,7 +273,7 @@ def create_directory(directory_name):
         data_socket = start_data_connection()
         socket.recv(BUFFER_SIZE)
     except:
-        print("Couldn't connect to the server. Make sure a connection has been established.")
+        print("400 Couldn't connect to the server. Make sure a connection has been established.")
         return None
     try:
         # Send directory path name length, then directory path name
@@ -260,14 +282,14 @@ def create_directory(directory_name):
         data_socket.sendall(directory_name.encode())
         socket.recv(BUFFER_SIZE)
     except:
-        print("Couldn't send Directory details")
+        print("400 Couldn't send Directory details")
         return None
 
     directory_check = int(socket.recv(BUFFER_SIZE).decode())
     if directory_check:
-        print("directory created successfully.")
+        print("200 directory created successfully.")
     else:
-        print("couldn't create the directory.")
+        print("400 couldn't create the directory.")
     return None
 
 
@@ -278,21 +300,21 @@ def remove_directory(directory_name):
         data_socket = start_data_connection()
         socket.recv(BUFFER_SIZE)
     except:
-        print("Couldn't connect to the server. Make sure a connection has been established.")
+        print("400 Couldn't connect to the server. Make sure a connection has been established.")
         return None
     try:
         data_socket.sendall(struct.pack("h", sys.getsizeof(directory_name)))
         data_socket.sendall(directory_name.encode())
         socket.recv(BUFFER_SIZE)
     except:
-        print("Couldn't send Directory details")
+        print("400 Couldn't send Directory details")
         return None
 
     directory_check = int(socket.recv(BUFFER_SIZE).decode())
     if directory_check:
-        print("directory removed successfully.")
+        print("200 directory removed successfully.")
     else:
-        print("couldn't remove the directory.")
+        print("400 couldn't remove the directory.")
     return None
 
 
@@ -303,21 +325,21 @@ def change_directory(new_path):
         socket.sendall(b"CWD")
         data_socket = start_data_connection()
     except:
-        print("Couldn't connect to the server. Make sure a connection has been established.")
+        print("400 Couldn't connect to the server. Make sure a connection has been established.")
         return None
     try:
         # Send directory path name length, then directory path name
         data_socket.sendall(struct.pack("h", sys.getsizeof(new_path)))
         data_socket.sendall(new_path.encode())
     except:
-        print("Couldn't send Path details")
+        print("400 Couldn't send Path details")
         return None
 
     change_check = int(socket.recv(BUFFER_SIZE).decode())
     if change_check:
-        print("path changed successfully.")
+        print("200 path changed successfully.")
     else:
-        print("couldn't change path.")
+        print("400 couldn't change path.")
     return None
 
 
@@ -328,15 +350,15 @@ def display_current_directory():
         socket.sendall(b"PWD")
         data_socket = start_data_connection()
     except:
-        print("Couldn't connect to the server. Make sure a connection has been established.")
+        print("400 Couldn't connect to the server. Make sure a connection has been established.")
         return None
     try:
         # Send directory path name length, then directory path name
         path_len = int(data_socket.recv(BUFFER_SIZE).decode())
         path = data_socket.recv(path_len).decode()
-        print(path)
+        print("200 Done. Current path: " + path)
     except:
-        print("Couldn't receive path.")
+        print("400 Couldn't receive path.")
         return None
     return None
 
@@ -345,15 +367,15 @@ def change_directory_up():
     try:
         socket.sendall(b"CDUP")
     except:
-        print("Couldn't connect to the server. Make sure a connection has been established.")
+        print("400 Couldn't connect to the server. Make sure a connection has been established.")
         return None
 
     change_check = int(socket.recv(BUFFER_SIZE).decode())
     if change_check:
-        print("path changed successfully.")
+        print("200 path changed successfully.")
         display_current_directory()
     else:
-        print("couldn't change path.")
+        print("400 couldn't change path.")
     return None
 
 
@@ -371,16 +393,16 @@ while True:
         list_of_files()
 
     elif command[0].upper() == "STOR":
-        upload_file_on_server(input("File name: "))
+        upload_file_on_server(command[1])
 
     elif command[0].upper() == "RETR":
-        download_file_from_server(input("File name: "))
+        download_file_from_server(command[1])
 
     elif command[0].upper() == "MKD":
-        create_directory(input("Folder name: "))
+        create_directory(command[1])
 
     elif command[0].upper() == "DELE":
-        delete_file(input("File name: "))
+        delete_file(command[1])
 
     elif command[0].upper() == "RMD":
         remove_directory(command[1])
@@ -394,6 +416,8 @@ while True:
     elif command[0].upper() == "CDUP":
         change_directory_up()
 
+    elif command[0].upper() == "REPORT":
+        report()
     elif command[0].upper() == "QUIT":
         socket.close()
         break
