@@ -47,6 +47,7 @@ class Client(Thread):
             for i in range(len(users)):
                 if data == users[i]["username"]:
                     self.username_exist = True
+                    self.username = data
                     self.conn.send(b'1')
                     self.password = self.conn.recv(Client.BUFFER_SIZE).decode()
                     print(f"\nReceived: {format(self.password)}")
@@ -79,6 +80,8 @@ class Client(Thread):
                     self.change_directory()
                 elif data == "CDUP":
                     self.change_directory_up()
+                elif data == "REPORT":
+                    self.report()
                 elif data == "QUIT":
                     self.conn.close()
                     break
@@ -105,60 +108,73 @@ class Client(Thread):
 
 
     def list_files(self) -> None:
-        conn2 = self.start_data_connection()
-        print("Listing files...")
-        listing = os.listdir(self.current_directory)
-        conn2.send(len(listing).to_bytes(4, byteorder='big'))
-        for i in listing:
-            j = os.path.relpath(self.current_directory + '\\' + i, os.getcwd())
-            conn2.send(len(i).to_bytes(4, byteorder='big'))
-            conn2.send(i.encode())
-            conn2.send(os.path.getsize(j).to_bytes(4, byteorder='big'))
-            file_creation_time = os.path.getctime(j)
-            file_creation_time_str = datetime.datetime.fromtimestamp(file_creation_time).strftime('%Y-%m-%d %H:%M:%S')
-            conn2.send(file_creation_time_str.encode())
-            self.conn.recv(Client.BUFFER_SIZE)
+        file_name = "report.txt"
+        with open(file_name, "a") as f:
+            f.write("Username--> " + self.username + " Requested command:LIST\n")
+            conn2 = self.start_data_connection()
+            print("Listing files...")
+            listing = os.listdir(self.current_directory)
+            conn2.send(len(listing).to_bytes(4, byteorder='big'))
+            for i in listing:
+                j = os.path.relpath(self.current_directory + '\\' + i, os.getcwd())
+                conn2.send(len(i).to_bytes(4, byteorder='big'))
+                conn2.send(i.encode())
+                f.write("\t" + i + " ")
+                conn2.send(os.path.getsize(j).to_bytes(4, byteorder='big'))
+                file_creation_time = os.path.getctime(j)
+                file_creation_time_str = datetime.datetime.fromtimestamp(file_creation_time).strftime('%Y-%m-%d %H:%M:%S')
+                f.write(file_creation_time_str + "\n")
+                conn2.send(file_creation_time_str.encode())
+                self.conn.recv(Client.BUFFER_SIZE)
+            f.write("---------------------------\n")
         print("Successfully sent file listing")
         return
 
     def store_file_in_server(self) -> None:
-        conn2 = self.start_data_connection()
-        # Send message once server is ready to recieve file details
-        self.conn.send(b'1')
-        # Recieve file name length, then file name
-        fileNameLength = struct.unpack(">h", conn2.recv(2))[0]
-        fileName = conn2.recv(fileNameLength).decode('utf-8')
-        # Send message to let client know server is ready for document content
-        self.conn.send(b'1')
-        # Recieve file size
-        fileSize = struct.unpack(">i", conn2.recv(4))[0]
-        # Initialise and enter loop to recieve file content
-        start_time = time.time()
-        outputFile = open(self.current_directory + "\\" + fileName, 'wb')
-        # This keeps track of how many bytes we have recieved, so we know when to stop the loop
-        bytesReceived = 0
-        print("\nReceiving...")
-        while bytesReceived < fileSize:
-            l = conn2.recv(Client.BUFFER_SIZE)
-            outputFile.write(l)
-            bytesReceived += Client.BUFFER_SIZE
-        outputFile.close()
-        print("\nReceived file: {}".format(fileName))
-        # Send upload performance details
-        conn2.send(struct.pack('>f', time.time() - start_time))
-        conn2.send(struct.pack('>i', fileSize))
-        return
+        file_name = "report.txt"
+        with open(file_name, "a") as f:
+            f.write("Username--> " + self.username + " Requested command:STOR\n")
+            conn2 = self.start_data_connection()
+            # Send message once server is ready to recieve file details
+            self.conn.send(b'1')
+            # Recieve file name length, then file name
+            fileNameLength = struct.unpack(">h", conn2.recv(2))[0]
+            fileName = conn2.recv(fileNameLength).decode('utf-8')
+            # Send message to let client know server is ready for document content
+            self.conn.send(b'1')
+            # Recieve file size
+            fileSize = struct.unpack(">i", conn2.recv(4))[0]
+            # Initialise and enter loop to recieve file content
+            start_time = time.time()
+            outputFile = open(self.current_directory + "\\" + fileName, 'wb')
+            # This keeps track of how many bytes we have recieved, so we know when to stop the loop
+            bytesReceived = 0
+            print("\nReceiving...")
+            while bytesReceived < fileSize:
+                l = conn2.recv(Client.BUFFER_SIZE)
+                outputFile.write(l)
+                bytesReceived += Client.BUFFER_SIZE
+            outputFile.close()
+            print("\nReceived file: {}".format(fileName))
+            f.write("\tReceived file: " + fileName + "\n---------------------------\n")
+            # Send upload performance details
+            conn2.send(struct.pack('>f', time.time() - start_time))
+            conn2.send(struct.pack('>i', fileSize))
+            return
 
     def download_file_from_server(self) -> None:
-        conn2 = self.start_data_connection()
-        # Send message indicating readiness to receive file details
-        self.conn.send(b'1')
+        file_name = "report.txt"
+        with open(file_name, "a") as f:
+            f.write("Username--> " + self.username + " Requested command:RETR\n")
+            conn2 = self.start_data_connection()
+            # Send message indicating readiness to receive file details
+            self.conn.send(b'1')
 
-        # Receive file name length and extract it
-        fileNameLength = struct.unpack(">h", conn2.recv(2))[0]
+            # Receive file name length and extract it
+            fileNameLength = struct.unpack(">h", conn2.recv(2))[0]
 
-        # Receive the entire file name from the client
-        fileName = conn2.recv(fileNameLength).decode('utf-8')
+            # Receive the entire file name from the client
+            fileName = conn2.recv(fileNameLength).decode('utf-8')
 
 
         # Check if the file exists on the server
@@ -170,6 +186,52 @@ class Client(Thread):
             # If the file doesn't exist, send an error code to the client
             print("File name not valid")
             self.conn.sendall(struct.pack(">i", -1))
+
+            if fileName.startswith("/"):
+                directory, fileName = os.path.split(fileName)
+                self.change_directory()
+            # if directory == private_paths[0]["path"]:
+                # Check if the file exists on the server
+            if os.path.isfile(self.current_directory + "\\" + fileName):
+                # If the file exists, send its size to the client
+                fileSize = struct.pack(">i", os.path.getsize(self.current_directory + "\\" + fileName))
+                conn2.send(fileSize)
+            else:
+                # If the file doesn't exist, send an error code to the client
+                print("File name not valid")
+                self.conn.sendall(struct.pack(">i", -1))
+                return
+
+            # Wait for client's acknowledgement to start sending the file
+            self.conn.recv(Client.BUFFER_SIZE)
+
+            # Start the download timer
+            start_time = time.time()
+            print("Sending file...")
+
+            # Open the file in binary read mode for reading
+            content = open(fileName, 'rb')
+
+            # Read the file in chunks of BUFFER_SIZE and send them to the client
+            l = content.read(Client.BUFFER_SIZE)
+            while l:
+                print("server while")
+                conn2.send(l)
+                l = content.read(Client.BUFFER_SIZE)
+
+            # Close the file handle
+            self.conn.recv(Client.BUFFER_SIZE)
+
+            content.close()
+
+            # Receive the client's go-ahead before sending download details
+            self.conn.recv(Client.BUFFER_SIZE)
+
+            # Send the download time to the client
+            # conn.sendall(struct.pack(">f", time.time() - start_time))
+            print(f"{fileName} Successfully downloaded")
+            f.write("\tDownloaded file: " + fileName + "\n---------------------------\n")
+
             return
 
         # Wait for client's acknowledgement to start sending the file
@@ -205,119 +267,146 @@ class Client(Thread):
 
 
     def delete_file(self) -> None:
-        conn2 = self.start_data_connection()
-        self.conn.sendall(b"1")
-        file_name_length = struct.unpack("h", conn2.recv(2))[0]
-        file_name = conn2.recv(file_name_length).decode()
+        file_name = "report.txt"
+        with open(file_name, "a") as f:
+            f.write("Username--> " + self.username + " Requested command:DELE\n")
+            conn2 = self.start_data_connection()
+            self.conn.sendall(b"1")
+            file_name_length = struct.unpack("h", conn2.recv(2))[0]
+            file_name = conn2.recv(file_name_length).decode()
 
-        if os.path.isfile(self.current_directory + "\\" + file_name):
-            self.conn.sendall(struct.pack("i", 1))
-        else:
-            self.conn.sendall(struct.pack("i", -1))
-            return None
-        confirm_delete = self.conn.recv(Client.BUFFER_SIZE).decode()
-        if confirm_delete == "Y":
-            try:
-                os.remove(file_name)
+            if os.path.isfile(self.current_directory + "\\" + file_name):
                 self.conn.sendall(struct.pack("i", 1))
-            except:
-                print("Failed to delete {}".format(file_name))
+            else:
                 self.conn.sendall(struct.pack("i", -1))
-        else:
-            print("Delete abandoned by the client!")
-            return None
+                return None
+            confirm_delete = self.conn.recv(Client.BUFFER_SIZE).decode()
+            if confirm_delete == "Y":
+                try:
+                    os.remove(file_name)
+                    self.conn.sendall(struct.pack("i", 1))
+                    f.write("\tDeleted file: " + file_name + "\n---------------------------\n")
+                except:
+                    print("Failed to delete {}".format(file_name))
+                    self.conn.sendall(struct.pack("i", -1))
+            else:
+                print("Delete abandoned by the client!")
+                return None
 
     def create_directory(self) -> None:
-        conn2 = self.start_data_connection()
-        # Send go-ahead
-        self.conn.sendall(b"1")
-        # Get Directory details
-        directory_name_length = struct.unpack("h", conn2.recv(2))[0]
-        print(directory_name_length)
-        self.conn.sendall(b"1")
-        directory_name = conn2.recv(directory_name_length).decode()
-        print(directory_name)
-        self.conn.sendall(b"1")
-        try:
-            os.mkdir(self.current_directory + "\\" + directory_name)
+        file_name = "report.txt"
+        with open(file_name, "a") as f:
+            f.write("Username--> " + self.username + " Requested command:MKD\n")
+            conn2 = self.start_data_connection()
+            # Send go-ahead
             self.conn.sendall(b"1")
-        except OSError as error:
-            print(error)
-            self.conn.sendall(b"0")
-        return None
+            # Get Directory details
+            directory_name_length = struct.unpack("h", conn2.recv(2))[0]
+            print(directory_name_length)
+            self.conn.sendall(b"1")
+            directory_name = conn2.recv(directory_name_length).decode()
+            print(directory_name)
+            self.conn.sendall(b"1")
+            try:
+                os.mkdir(self.current_directory + "\\" + directory_name)
+                self.conn.sendall(b"1")
+                f.write("\tCreated directory : " + self.current_directory + "\\" + directory_name + "\n---------------------------\n")
+            except OSError as error:
+                print(error)
+                self.conn.sendall(b"0")
+            return None
 
     def remove_directory(self) -> None:
-        conn2 = self.start_data_connection()
-        # Send go-ahead
-        self.conn.sendall(b"1")
-        # Get Directory details
-        directory_name_length = struct.unpack("h", conn2.recv(2))[0]
-        directory_name = conn2.recv(directory_name_length).decode()
-        print(directory_name)
-        self.conn.sendall(b"1")
-        try:
-            if os.path.isabs(directory_name):
-                os.rmdir(directory_name)
-            else:
-                os.rmdir(self.current_directory + "\\" + directory_name)
-            # os.rmdir(directory_name)
+        file_name = "report.txt"
+        with open(file_name, "a") as f:
+            f.write("Username--> " + self.username + " Requested command:RMD\n")
+            conn2 = self.start_data_connection()
+            # Send go-ahead
             self.conn.sendall(b"1")
-        except OSError as error:
-            print(error)
-            self.conn.sendall(b"0")
-        return None
+            # Get Directory details
+            directory_name_length = struct.unpack("h", conn2.recv(2))[0]
+            directory_name = conn2.recv(directory_name_length).decode()
+            print(directory_name)
+            self.conn.sendall(b"1")
+            try:
+                if os.path.isabs(directory_name):
+                    os.rmdir(directory_name)
+                    f.write("\tCreated directory : " + directory_name + "\n---------------------------\n")
+                else:
+                    os.rmdir(self.current_directory + "\\" + directory_name)
+                    f.write("\tCreated directory : " + self.current_directory + "\\" + directory_name + "\n---------------------------\n")
+                # os.rmdir(directory_name)
+                self.conn.sendall(b"1")
+            except OSError as error:
+                print(error)
+                self.conn.sendall(b"0")
+            return None
 
     def change_directory(self) -> None:
-        # Send go-ahead
-        # Get Directory details
-        conn2 = self.start_data_connection()
-        new_path_length = struct.unpack("h", conn2.recv(2))[0]
-        new_path = conn2.recv(new_path_length).decode()
-        try:
-            if os.path.isabs(new_path):
-                self.current_directory = new_path
-            else:
-                self.current_directory = self.current_directory + "\\" + new_path
-            print(self.current_directory)
-            # os.chdir(new_path)
-            self.conn.sendall(b"1")
-        except OSError as error:
-            print(error)
-            self.conn.sendall(b"0")
-        return None
+        file_name = "report.txt"
+        with open(file_name, "a") as f:
+            f.write("Username--> " + self.username + " Requested command:CWD\n")
+            # Send go-ahead
+            # Get Directory details
+            conn2 = self.start_data_connection()
+            new_path_length = struct.unpack("h", conn2.recv(2))[0]
+            new_path = conn2.recv(new_path_length).decode()
+            f.write("\tPrevious directory : " + self.current_directory + "\n")
+            try:
+                if os.path.isabs(new_path):
+                    self.current_directory = new_path
+                else:
+                    self.current_directory = self.current_directory + "\\" + new_path
+                f.write("\tChanged to : " + self.current_directory + "\n---------------------------\n")
+                print(self.current_directory)
+                # os.chdir(new_path)
+                self.conn.sendall(b"1")
+            except OSError as error:
+                print(error)
+                self.conn.sendall(b"0")
+            return None
 
     def display_current_directory(self) -> None:
-        try:
-            conn2 = self.start_data_connection()
-            # Send response to client
-            self.conn.sendall(b'150 Opening data connection.')
-            # cwd = os.getcwd()
-            # print(cwd)
-            # conn2.sendall(str(sys.getsizeof(cwd)).encode())
-            # conn2.sendall(cwd.encode())
-            print(self.current_directory)
-            conn2.sendall(str(sys.getsizeof(self.current_directory)).encode())
-            conn2.sendall(self.current_directory.encode())
-            conn2.close()
-            self.conn.sendall('226 Transfer complete.'.encode('utf-8'))
-        except OSError as error:
-            print(error)
-        except Exception as e:
-            print(e)
-            print("couldn't send path.")
-        return None
+        file_name = "report.txt"
+        with open(file_name, "a") as f:
+            f.write("Username--> " + self.username + " Requested command:PWD\n")
+            try:
+                conn2 = self.start_data_connection()
+                # Send response to client
+                self.conn.sendall(b'150 Opening data connection.')
+                # cwd = os.getcwd()
+                # print(cwd)
+                # conn2.sendall(str(sys.getsizeof(cwd)).encode())
+                # conn2.sendall(cwd.encode())
+                print(self.current_directory)
+                conn2.sendall(str(sys.getsizeof(self.current_directory)).encode())
+                conn2.sendall(self.current_directory.encode())
+                conn2.close()
+                self.conn.sendall('226 Transfer complete.'.encode('utf-8'))
+                f.write("\tCurrent directory : " + self.current_directory + "\n---------------------------\n")
+            except OSError as error:
+                print(error)
+            except Exception as e:
+                print(e)
+                print("couldn't send path.")
+            return None
 
     def change_directory_up(self) -> None:
-        try:
-            print(self.current_directory)
-            self.current_directory = os.path.dirname(self.current_directory)
-            print(self.current_directory)
-            # os.chdir('../')
-            self.conn.sendall(b"1")
-        except OSError as error:
-            print(error)
-            self.conn.sendall(b"0")
-        return None
+        file_name = "report.txt"
+        with open(file_name, "a") as f:
+            f.write("Username--> " + self.username + " Requested command:CDUP\n")
+            try:
+                print(self.current_directory)
+                f.write("\tPrevious directory : " + self.current_directory + "\n")
+                self.current_directory = os.path.dirname(self.current_directory)
+                print(self.current_directory)
+                f.write("\tChanged to : " + self.current_directory + "\n---------------------------\n")
+                # os.chdir('../')
+                self.conn.sendall(b"1")
+            except OSError as error:
+                print(error)
+                self.conn.sendall(b"0")
+            return None
 
 
 #
