@@ -11,7 +11,7 @@ import struct
 import sys
 
 IP = "127.0.0.1"
-PORT = 21
+PORT = 27
 BUFFER_SIZE = 1024
 socket = S.socket(S.AF_INET, S.SOCK_STREAM)
 
@@ -419,6 +419,7 @@ while True:
     elif command[0].upper() == "REPORT":
         report()
     elif command[0].upper() == "QUIT":
+        socket.close()
         break
 
     else:
