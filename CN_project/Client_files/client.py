@@ -15,6 +15,7 @@ PORT = 27
 BUFFER_SIZE = 1024
 socket = S.socket(S.AF_INET, S.SOCK_STREAM)
 
+
 def connect(username, password):
     # Connect to the server
     print("Sending request to server...")
@@ -41,6 +42,7 @@ def start_data_connection():
     data_socket.connect(("127.0.0.1", 20))
     return data_socket
 
+
 def report():
     print("Reporting previous requests...")
     try:
@@ -57,6 +59,7 @@ def report():
         print(report_file)
     else:
         print("400 You are not Admin! The report file is unavailable.")
+
 
 def list_of_files():
     print("Requesting files...\n")
@@ -156,18 +159,30 @@ def download_file_from_server(fileName):
             data_socket.send(fileNameSize)
             data_socket.send(fileName.encode('utf-8'))
 
-            if fileName.startswith("/"):
+            if fileName.startswith("\\"):
                 directory, fileName = os.path.split(fileName)
-                change_directory(directory[1:])
+                try:
+                    # Send directory path name length, then directory path name
+                    data_socket.sendall(struct.pack("h", sys.getsizeof(directory[1:])))
+                    data_socket.sendall(directory[1:].encode())
+                except:
+                    print("400 Couldn't send Path details")
+                    return None
+                change_check = int(socket.recv(BUFFER_SIZE).decode())
+                if change_check:
+                    print("200 path changed successfully.")
+                else:
+                    print("400 couldn't change path.")
+                    return None
 
             # Receive file size from the server
             fileSize = struct.unpack(">i", data_socket.recv(4))[0]
             if fileSize == -1:
                 # If file size is -1, file doesn't exist
-                print("400 File does not exist. Make sure the name was entered correctly")
+                print("400 This is a private path or file!")
                 return
         else:
-            print("400 This is a private path or file!")
+            print("Connection error!")
             return
     except:
         print("400 Error checking file")
@@ -205,7 +220,6 @@ def download_file_from_server(fileName):
         print("400 Error downloading file")
         return
     return
-
 
 
 def delete_file(file_name):
@@ -419,6 +433,8 @@ while True:
     elif command[0].upper() == "REPORT":
         report()
     elif command[0].upper() == "QUIT":
+        socket.send(b'QUIT')
+        socket.recv(BUFFER_SIZE)
         socket.close()
         break
 

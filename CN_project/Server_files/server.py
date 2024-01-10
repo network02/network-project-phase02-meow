@@ -19,7 +19,7 @@ users = [{'username': 'user1', 'password': '1234',
          {'username': 'admin', 'password': '0000',
           'accessLevel': 'full'}]
 
-private_paths = [{'path': 'private1'},
+private_paths = [{'path': 'D:\\JAVA\\Term 3\\Projects\\network-project-phase02-meow\\CN_project\\Server_files\\private1'},
                  {'path': 'private2'}]
 
 
@@ -28,7 +28,7 @@ class Client(Thread):
     PORT = 27
     BUFFER_SIZE = 1024
 
-    def __init__(self, conn : S.socket) -> None:
+    def __init__(self, conn: S.socket) -> None:
         self.username_exist: bool = False
         self.conn: S.socket = conn
         self.authenticated: bool = False
@@ -83,8 +83,9 @@ class Client(Thread):
                 elif data == "REPORT":
                     self.report()
                 elif data == "QUIT":
+                    self.conn.send(b'1')
                     self.conn.close()
-                    break
+                    return
                 data = None
 
     def start_data_connection(self):
@@ -110,7 +111,6 @@ class Client(Thread):
             conn2.send(b'-1')
             print("Not Admin.\n")
 
-
     def list_files(self) -> None:
         file_name = "report.txt"
         with open(file_name, "a") as f:
@@ -126,7 +126,8 @@ class Client(Thread):
                 f.write("\t" + i + " ")
                 conn2.send(os.path.getsize(j).to_bytes(4, byteorder='big'))
                 file_creation_time = os.path.getctime(j)
-                file_creation_time_str = datetime.datetime.fromtimestamp(file_creation_time).strftime('%Y-%m-%d %H:%M:%S')
+                file_creation_time_str = datetime.datetime.fromtimestamp(file_creation_time).strftime(
+                    '%Y-%m-%d %H:%M:%S')
                 f.write(file_creation_time_str + "\n")
                 conn2.send(file_creation_time_str.encode())
                 self.conn.recv(Client.BUFFER_SIZE)
@@ -167,38 +168,42 @@ class Client(Thread):
             return
 
     def download_file_from_server(self) -> None:
-        file_name = "report.txt"
-        with open(file_name, "a") as f:
-            f.write("Username--> " + self.username + " Requested command:RETR\n")
-            conn2 = self.start_data_connection()
-            # Send message indicating readiness to receive file details
+        conn2 = self.start_data_connection()
+        # Send message indicating readiness to receive file details
+        self.conn.send(b'1')
+
+        # Receive file name length and extract it
+        fileNameLength = struct.unpack(">h", conn2.recv(2))[0]
+
+        # Receive the entire file name from the client
+        fileName = conn2.recv(fileNameLength).decode('utf-8')
+        print(fileName)
+        current_path = os.getcwd()
+        if fileName.startswith("\\"):
+            directory, fileName = os.path.split(fileName)
+            print(directory)
+            print(fileName)
+            new_path_length = struct.unpack("h", conn2.recv(2))[0]
+            new_path = conn2.recv(new_path_length).decode()
+            try:
+                os.chdir(new_path)
+            except OSError as error:
+                print(error)
+                return None
+            self.current_directory = self.current_directory + "\\" + directory
+        print("cd" + self.current_directory)
+        access = True
+        if os.path.abspath(self.current_directory) == private_paths[0]["path"]:
+            for i in range(len(users)):
+                if users[i]["username"] == self.username and users[i]["accessLevel"] == "low":
+                    access = False
+                    # print("200 Private paht!")
+        if access:
             self.conn.send(b'1')
-
-            # Receive file name length and extract it
-            fileNameLength = struct.unpack(">h", conn2.recv(2))[0]
-
-            # Receive the entire file name from the client
-            fileName = conn2.recv(fileNameLength).decode('utf-8')
-
-
-        # Check if the file exists on the server
-        if os.path.isfile(self.current_directory + "\\" + fileName):
-            # If the file exists, send its size to the client
-            fileSize = struct.pack(">i", os.path.getsize(self.current_directory + "\\" + fileName))
-            conn2.send(fileSize)
-        else:
-            # If the file doesn't exist, send an error code to the client
-            print("File name not valid")
-            self.conn.sendall(struct.pack(">i", -1))
-
-            if fileName.startswith("/"):
-                directory, fileName = os.path.split(fileName)
-                self.change_directory()
-            # if directory == private_paths[0]["path"]:
-                # Check if the file exists on the server
-            if os.path.isfile(self.current_directory + "\\" + fileName):
+            # Check if the file exists on the server
+            if os.path.isfile(fileName):
                 # If the file exists, send its size to the client
-                fileSize = struct.pack(">i", os.path.getsize(self.current_directory + "\\" + fileName))
+                fileSize = struct.pack(">i", os.path.getsize(fileName))
                 conn2.send(fileSize)
             else:
                 # If the file doesn't exist, send an error code to the client
@@ -234,41 +239,15 @@ class Client(Thread):
             # Send the download time to the client
             # conn.sendall(struct.pack(">f", time.time() - start_time))
             print(f"{fileName} Successfully downloaded")
-            f.write("\tDownloaded file: " + fileName + "\n---------------------------\n")
-
+            os.chdir(current_path)
+            self.current_directory = current_path
             return
 
-        # Wait for client's acknowledgement to start sending the file
-        self.conn.recv(Client.BUFFER_SIZE)
-
-        # Start the download timer
-        start_time = time.time()
-        print("Sending file...")
-
-        # Open the file in binary read mode for reading
-        content = open(fileName, 'rb')
-
-        # Read the file in chunks of BUFFER_SIZE and send them to the client
-        l = content.read(Client.BUFFER_SIZE)
-        while l:
-            print("server while")
-            conn2.send(l)
-            l = content.read(Client.BUFFER_SIZE)
-
-        # Close the file handle
-        self.conn.recv(Client.BUFFER_SIZE)
-
-        content.close()
-
-        # Receive the client's go-ahead before sending download details
-        self.conn.recv(Client.BUFFER_SIZE)
-
-        # Send the download time to the client
-        # conn.sendall(struct.pack(">f", time.time() - start_time))
-        print(f"{fileName} Successfully downloaded")
-
-        return
-
+        else:
+            print("This is a private path or file!")
+            os.chdir(current_path)
+            self.current_directory = current_path
+            self.conn.send(b'-1')
 
     def delete_file(self) -> None:
         file_name = "report.txt"
@@ -314,7 +293,8 @@ class Client(Thread):
             try:
                 os.mkdir(self.current_directory + "\\" + directory_name)
                 self.conn.sendall(b"1")
-                f.write("\tCreated directory : " + self.current_directory + "\\" + directory_name + "\n---------------------------\n")
+                f.write(
+                    "\tCreated directory : " + self.current_directory + "\\" + directory_name + "\n---------------------------\n")
             except OSError as error:
                 print(error)
                 self.conn.sendall(b"0")
@@ -338,7 +318,8 @@ class Client(Thread):
                     f.write("\tCreated directory : " + directory_name + "\n---------------------------\n")
                 else:
                     os.rmdir(self.current_directory + "\\" + directory_name)
-                    f.write("\tCreated directory : " + self.current_directory + "\\" + directory_name + "\n---------------------------\n")
+                    f.write(
+                        "\tCreated directory : " + self.current_directory + "\\" + directory_name + "\n---------------------------\n")
                 # os.rmdir(directory_name)
                 self.conn.sendall(b"1")
             except OSError as error:
@@ -695,16 +676,14 @@ class Client(Thread):
 
 
 if __name__ == "__main__":
-        print("Welcome to the FTP server.\nTo get started, connect a client.")
+    print("Welcome to the FTP server.\nTo get started, connect a client.")
 
-        with S.socket(S.AF_INET, S.SOCK_STREAM) as socket1:
-            socket1.bind((Client.IP, Client.PORT))
-            socket1.listen(10)
+    with S.socket(S.AF_INET, S.SOCK_STREAM) as socket1:
+        socket1.bind((Client.IP, Client.PORT))
+        socket1.listen(10)
 
-            while True:
-                client_socket, client_address = socket1.accept()
-                print(f"\nConnected to by address: {client_address}")
-                new_client = Client(client_socket)
-                new_client.start()
-
-
+        while True:
+            client_socket, client_address = socket1.accept()
+            print(f"\nConnected to by address: {client_address}")
+            new_client = Client(client_socket)
+            new_client.start()
