@@ -97,14 +97,18 @@ class Client(Thread):
 
     def report(self):
         conn2 = self.start_data_connection()
-        print("Reporting previous requests...\n")
+        if self.username == "admin":
+            print("Reporting previous requests...\n")
 
-        with open("report.txt", "r+") as report_file:
-            # Reading form a file
-            conn2.send(b'1')
-            l = report_file.read(4096)
-            conn2.send(l.encode('utf-8'))
-        print("The report has been sent.\n")
+            with open("report.txt", "r+") as report_file:
+                # Reading form a file
+                conn2.send(b'1')
+                l = report_file.read(4096)
+                conn2.send(l.encode('utf-8'))
+            print("The report has been sent.\n")
+        else:
+            conn2.send(b'-1')
+            print("Not Admin.\n")
 
 
     def list_files(self) -> None:

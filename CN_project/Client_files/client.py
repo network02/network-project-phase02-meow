@@ -56,7 +56,7 @@ def report():
         report_file = data_socket.recv(4096).decode()
         print(report_file)
     else:
-        print("400 The report file is unavailable.")
+        print("400 You are not Admin! The report file is unavailable.")
 
 def list_of_files():
     print("Requesting files...\n")

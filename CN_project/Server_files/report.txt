@@ -1,0 +1,18 @@
+Username--> admin Requested command:LIST
+	Hello 2024-01-07 21:07:08
+	HelloText.txt 2024-01-10 05:47:36
+	private1 2024-01-10 04:05:52
+	privateFile.txt 2024-01-10 03:53:49
+	report.txt 2024-01-10 03:53:49
+	server.py 2023-12-31 03:22:52
+	serverFile.txt 2024-01-06 16:55:33
+---------------------------
+Username--> user1 Requested command:LIST
+	Hello 2024-01-07 21:07:08
+	HelloText.txt 2024-01-10 05:47:36
+	private1 2024-01-10 04:05:52
+	privateFile.txt 2024-01-10 03:53:49
+	report.txt 2024-01-10 03:53:49
+	server.py 2023-12-31 03:22:52
+	serverFile.txt 2024-01-06 16:55:33
+---------------------------
